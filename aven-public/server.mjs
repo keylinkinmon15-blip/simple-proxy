@@ -116,7 +116,7 @@ export async function route(req,res,opts={}){
  const head=req.method==='HEAD',path=new URL(req.url||'/','http://localhost').pathname;
  if(path==='/manifest.json'){json(res,200,manifest,head);return}
  if(path==='/health'){json(res,200,{ok:true,version:manifest.version,name:manifest.name,sourceProviders:providers(opts.env).length,audioFilter:'English only',resolutionFilter:'720p–2160p',sourcePolicy:'direct URL only; no resolution/audio verification'},head);return}
- let diagnosticMatch=path.match(/^\\/diagnostics\\/stream\\/(movie|series)\\/(tt\\d{5,12}(?::\\d{1,4}:\\d{1,5})?)\\.json$/);
+ let diagnosticMatch=path.match(/^\/diagnostics\/stream\/(movie|series)\/(tt\d{5,12}(?::\d{1,4}:\d{1,5})?)\.json$/);
  if(diagnosticMatch){const result=await collectStreams(diagnosticMatch[1],diagnosticMatch[2],opts);json(res,200,result.diagnostics,head);return}
  if(path==='/'){res.writeHead(200,{'Content-Type':'text/html; charset=utf-8','Access-Control-Allow-Origin':'*'});res.end('<!doctype html><title>AVEN Cinema</title><body style="background:#0a0e16;color:#fff;font:18px system-ui;padding:2em"><h1>AVEN Cinema • English HD–4K</h1><p>Fusion / Stremio addon. Playable streams require configured authorized providers.</p><p><a style="color:#90cfff" href="/manifest.json">Add-on manifest</a></p></body>');return}
  let m=path.match(/^\/stream\/(movie|series)\/(tt\d{5,12}(?::\d{1,4}:\d{1,5})?)\.json$/);
