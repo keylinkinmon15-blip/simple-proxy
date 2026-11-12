@@ -5,7 +5,7 @@ const CACHE_MS=180000, TIMEOUT_MS=45000;
 const cache=new Map();
 const headers={'Access-Control-Allow-Origin':'*','Access-Control-Allow-Methods':'GET,HEAD,OPTIONS','Content-Type':'application/json; charset=utf-8'};
 export const manifest={
- id:'com.aven.cinema.public.en.hd4k',version:'3.0.1',name:'AVEN Cinema • English HD–4K',
+ id:'com.aven.cinema.public.en.hd4k',version:'3.0.2',name:'AVEN Cinema • English HD–4K',
  description:'Movie and TV catalog, metadata, search, and English 720p–4K direct video streams from configured authorized sources. A movie poster does not guarantee a stream.',
  types:['movie','series'],resources:['catalog','meta','stream'],idPrefixes:['tt'],
  catalogs:[
@@ -25,11 +25,15 @@ export function quality(stream){
  return 0;
 }
 export function english(stream){
- const declarations=[stream.languages,stream.language,stream.lang,stream.audioLanguages].flat().filter(Boolean).map(x=>str(x).trim().toLowerCase());
- if(declarations.length)return declarations.length===1&&/^(en|eng|en-us|en-gb|english|english\s*\(us\)|english\s*\(uk\))$/.test(declarations[0]);
- const s=[stream.name,stream.title,stream.behaviorHints?.filename].filter(Boolean).map(str).join(' ');
- if(/\b(non[- ]?english|multi(?:language|audio)?|dual[- ]?audio|sub(?:bed|titles?)?\s*only|hindi|spanish|french|german|russian|portuguese|japanese|korean|arabic|italian|turkish|tamil|telugu)\b/i.test(s))return false;
- return /\b(english|eng|en[-_](?:us|gb)|en)\b/i.test(s)||/🇬🇧|🇺🇸/.test(s);
+ const isEnglish=(value)=>/^(?:en|eng|en-us|en-gb|en_us|en_gb|english|english\s*\(us\)|english\s*\(uk\))$/i.test(String(value??'').trim());
+ const data=[stream.audioLanguages,stream.languages,stream.language,stream.lang].flat().filter(v=>v!==undefined&&v!==null&&v!=='');
+ const tokens=data.flatMap(v=>String(v).split(/[,;/|+&]/).map(x=>x.trim()).filter(Boolean));
+ if(tokens.length)return tokens.some(isEnglish);
+ // The upstream FMHY adapter puts its declared audio language on the SECOND line.
+ // Never infer an English audio track from subtitles, the provider name, or a movie title.
+ const audioLine=String(stream.name||'').split(/\r?\n/)[1]||'';
+ const clean=audioLine.replace(/\b(?:audio|language|lang|dual|multi)\b\s*:?/ig,' ').trim();
+ return clean.split(/[,;/|+&\s]+/).some(isEnglish);
 }
 function directURL(stream){
  if(typeof stream.url!=='string'||!stream.url||stream.externalUrl||stream.infoHash||stream.ytId||stream.behaviorHints?.notWebReady)return false;
