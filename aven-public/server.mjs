@@ -1,11 +1,11 @@
 import http from 'node:http';
 
 const CINEMETA = 'https://v3-cinemeta.strem.io';
-const CACHE_MS=180000, TIMEOUT_MS=7000;
+const CACHE_MS=180000, TIMEOUT_MS=45000;
 const cache=new Map();
 const headers={'Access-Control-Allow-Origin':'*','Access-Control-Allow-Methods':'GET,HEAD,OPTIONS','Content-Type':'application/json; charset=utf-8'};
 export const manifest={
- id:'com.aven.cinema.public.en.hd4k',version:'3.0.0',name:'AVEN Cinema • English HD–4K',
+ id:'com.aven.cinema.public.en.hd4k',version:'3.0.1',name:'AVEN Cinema • English HD–4K',
  description:'Movie and TV catalog, metadata, search, and English 720p–4K direct video streams from configured authorized sources. A movie poster does not guarantee a stream.',
  types:['movie','series'],resources:['catalog','meta','stream'],idPrefixes:['tt'],
  catalogs:[
@@ -69,13 +69,32 @@ async function remoteJSON(url,fetcher=fetch){
  if(cache.size>200)cache.delete(cache.keys().next().value);
  return data;
 }
-export async function getStreams(type,id,opts={}){
- if(!['movie','series'].includes(type)||!validId.test(id))return {streams:[]};
- const found=await Promise.allSettled(providers(opts.env).map(async p=>{
+async function collectStreams(type,id,opts={}){
+ const configured=providers(opts.env);
+ if(!['movie','series'].includes(type)||!validId.test(id))return {streams:[],diagnostics:{configuredProviders:configured.length,acceptedStreams:0,error:'Invalid title ID'}};
+ const found=await Promise.allSettled(configured.map(async p=>{
   const data=await remoteJSON(p.base+'stream/'+type+'/'+encodeURIComponent(id)+'.json',opts.fetcher||fetch);
   return (Array.isArray(data.streams)?data.streams:[]).map(s=>({...s,provider:p.name}));
  }));
- return {streams:filterStreams(found.flatMap(r=>r.status==='fulfilled'?r.value:[]))};
+ const raw=found.flatMap(r=>r.status==='fulfilled'?r.value:[]);
+ const streams=filterStreams(raw);
+ const diagnostics={
+  configuredProviders:configured.length,
+  respondingProviders:found.filter(r=>r.status==='fulfilled').length,
+  failedProviders:found.filter(r=>r.status==='rejected').length,
+  candidates:raw.length,
+  directUrlCandidates:raw.filter(directURL).length,
+  labeled720pOrHigher:raw.filter(s=>quality(s)>=720).length,
+  labeledEnglish:raw.filter(english).length,
+  acceptedStreams:streams.length,
+  providerResults:found.map((r,i)=>({name:configured[i].name,status:r.status==='fulfilled'?'responded':'failed',candidates:r.status==='fulfilled'?r.value.length:0,reason:r.status==='rejected'?'Upstream unavailable or timed out':undefined}))
+ };
+ console.log('AVEN stream search',JSON.stringify({type,id,...diagnostics}));
+ return {streams,diagnostics};
+}
+export async function getStreams(type,id,opts={}){
+ const result=await collectStreams(type,id,opts);
+ return {streams:result.streams};
 }
 export async function getCatalog(type,extra='',opts={}){
  if(!['movie','series'].includes(type))return {metas:[]};
@@ -97,6 +116,8 @@ export async function route(req,res,opts={}){
  const head=req.method==='HEAD',path=new URL(req.url||'/','http://localhost').pathname;
  if(path==='/manifest.json'){json(res,200,manifest,head);return}
  if(path==='/health'){json(res,200,{ok:true,version:manifest.version,name:manifest.name,sourceProviders:providers(opts.env).length,audioFilter:'English only',resolutionFilter:'720p–2160p',sourcePolicy:'direct URL only; no resolution/audio verification'},head);return}
+ let diagnosticMatch=path.match(/^\\/diagnostics\\/stream\\/(movie|series)\\/(tt\\d{5,12}(?::\\d{1,4}:\\d{1,5})?)\\.json$/);
+ if(diagnosticMatch){const result=await collectStreams(diagnosticMatch[1],diagnosticMatch[2],opts);json(res,200,result.diagnostics,head);return}
  if(path==='/'){res.writeHead(200,{'Content-Type':'text/html; charset=utf-8','Access-Control-Allow-Origin':'*'});res.end('<!doctype html><title>AVEN Cinema</title><body style="background:#0a0e16;color:#fff;font:18px system-ui;padding:2em"><h1>AVEN Cinema • English HD–4K</h1><p>Fusion / Stremio addon. Playable streams require configured authorized providers.</p><p><a style="color:#90cfff" href="/manifest.json">Add-on manifest</a></p></body>');return}
  let m=path.match(/^\/stream\/(movie|series)\/(tt\d{5,12}(?::\d{1,4}:\d{1,5})?)\.json$/);
  if(m){json(res,200,await getStreams(m[1],m[2],opts),head);return}
