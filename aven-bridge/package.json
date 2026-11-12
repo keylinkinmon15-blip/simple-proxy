@@ -1,0 +1,19 @@
+{
+  "name": "aven-torrent-bridge",
+  "version": "0.1.0",
+  "description": "Experimental private torrent-to-HTTP bridge",
+  "main": "index.js",
+  "scripts": {
+    "start": "node server.mjs",
+    "test": "node --test test.mjs",
+    "smoke": "node smoke.mjs"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "commonjs",
+  "dependencies": {
+    "webtorrent": "^3.0.21"
+  },
+  "private": true
+}
